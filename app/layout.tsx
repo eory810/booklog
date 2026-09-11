@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "내 서재 — 바코드 스캔",
-  description: "바코드를 스캔해 책을 서재에 저장하고 목록으로 관리합니다.",
+  title: "내 서재 📚 — 우리집 책 스캔",
+  description: "바코드를 스캔해 우리집 책을 디지털 서재로 정리하세요.",
 };
 
 export default function RootLayout({
