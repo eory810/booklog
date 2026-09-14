@@ -177,13 +177,26 @@ function CameraScanner({
   return (
     <div className="modal-bg" onClick={onClose}>
       <div className="modal cam" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">
+        <div className="cam-head">
           <b>📷 카메라로 스캔</b>
-          <button className="x" onClick={onClose}>
-            ✕
+          <button className="cam-close" onClick={onClose} aria-label="닫기">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none"
+              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="6" y1="6" x2="18" y2="18" />
+              <line x1="18" y1="6" x2="6" y2="18" />
+            </svg>
           </button>
         </div>
-        <div id="reader" className="reader" />
+        <div className="cam-stage">
+          <div id="reader" className="reader" />
+          <button className="cam-close-float" onClick={onClose} aria-label="닫기">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none"
+              stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+              <line x1="6" y1="6" x2="18" y2="18" />
+              <line x1="18" y1="6" x2="6" y2="18" />
+            </svg>
+          </button>
+        </div>
         {err ? (
           <p className="cam-err">{err}</p>
         ) : (
@@ -248,6 +261,10 @@ export default function Page() {
   }, []);
 
   const refocus = useCallback(() => {
+    // 폰(터치)에서는 자동 포커스 금지 → 숫자 키보드가 저절로 뜨지 않게.
+    // 검색창을 직접 눌렀을 때만 키보드가 뜸. USB 스캐너를 쓰는 데스크톱만 자동 포커스.
+    if (typeof window !== "undefined" && !window.matchMedia("(pointer: fine)").matches)
+      return;
     if (tab === "library" && !camOpen && !selected) scanRef.current?.focus();
   }, [tab, camOpen, selected]);
 
@@ -979,8 +996,12 @@ export default function Page() {
           <div className="modal detail" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <b>책 정보</b>
-              <button className="x" onClick={() => setSelected(null)}>
-                ✕
+              <button className="x" onClick={() => setSelected(null)} aria-label="닫기">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                  stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                </svg>
               </button>
             </div>
             <div className="dbody">
@@ -1146,11 +1167,11 @@ export default function Page() {
         .beam { width: 12px; height: 30px; border-radius: 3px; background: rgba(255, 255, 255, 0.85);
           animation: pulse 1.4s ease-in-out infinite; flex: none; }
         @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
-        .scan { flex: 1; background: none; border: none; outline: none; color: #fff; font-size: 18px; font-weight: 600; }
+        .scan { flex: 1; min-width: 0; background: none; border: none; outline: none; color: #fff; font-size: 18px; font-weight: 600; }
         .scan::placeholder { color: rgba(255, 255, 255, 0.65); font-weight: 500; }
         .cambtn { width: 46px; height: 46px; flex: none; display: flex; align-items: center; justify-content: center;
-          font-size: 22px; background: rgba(255, 255, 255, 0.22); border-radius: 12px; transition: 0.15s; }
-        .cambtn:hover { background: rgba(255, 255, 255, 0.34); }
+          font-size: 22px; background: rgba(255, 255, 255, 0.25); border-radius: 12px; transition: 0.15s; }
+        .cambtn:hover { background: rgba(255, 255, 255, 0.36); }
         .cambtn:active { transform: scale(0.93); }
 
         .scanopts { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 6px 4px; }
@@ -1327,10 +1348,25 @@ export default function Page() {
         .x:active { transform: scale(0.92); }
 
         /* 카메라 */
-        .modal.cam { max-width: 380px; }
+        .modal.cam { max-width: 400px; overflow: hidden; }
+        .cam-head { display: flex; align-items: center; justify-content: space-between;
+          padding: 14px 14px 12px 18px; }
+        .cam-head b { font-size: 16px; font-weight: 900; }
+        .cam-close { width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center;
+          border-radius: 50%; background: #eef1ee; color: var(--ink); }
+        .cam-close:hover { background: #dfe4e0; }
+        .cam-close:active { transform: scale(0.92); }
+        .cam-stage { position: relative; }
         .reader { width: 100%; min-height: 260px; background: #000; overflow: hidden; }
         .reader :global(video) { width: 100% !important; height: auto !important; display: block; }
         .reader :global(img) { display: none; }
+        /* 영상 위에 뜨는 큰 닫기 버튼 (눈에 잘 띄게) */
+        .cam-close-float { position: absolute; top: 12px; right: 12px; z-index: 4;
+          width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;
+          border-radius: 50%; background: rgba(0, 0, 0, 0.6); color: #fff; backdrop-filter: blur(4px);
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4); }
+        .cam-close-float:hover { background: rgba(0, 0, 0, 0.75); }
+        .cam-close-float:active { transform: scale(0.92); }
         .cam-tip, .cam-err { padding: 14px 18px; font-size: 13.5px; color: var(--sub); text-align: center; }
         .cam-err { color: #d04545; font-weight: 600; }
 
@@ -1413,6 +1449,24 @@ export default function Page() {
           }
           .bookwrap { height: 131px; padding-bottom: 13px; }
           .book3d { width: 68px; height: 98px; }
+
+          /* 사용법(첫 방문) 화면 모바일에서 컴팩트하게 */
+          .modal { max-height: 88vh; }
+          .intro-hero { padding: 22px 20px 18px; }
+          .intro-emo { font-size: 36px; }
+          .intro-hero h2 { font-size: 19px; }
+          .intro-hero p { font-size: 13px; }
+          .intro-list { padding: 12px 18px 2px; }
+          .intro-list li { padding: 7px 0; }
+          .intro-list li span { font-size: 20px; width: 26px; }
+          .intro-list b { font-size: 13.5px; }
+          .intro-list em { font-size: 12px; }
+          .intro-warn { margin: 6px 18px 0; padding: 11px 13px; font-size: 12px; }
+          .intro-cta { margin: 14px 18px 18px; width: calc(100% - 36px); padding: 13px; font-size: 14.5px; }
+
+          /* 카메라 영상 높이 제한 */
+          .reader { max-height: 60vh; }
+          .reader :global(video) { max-height: 60vh; object-fit: cover; }
         }
       `}</style>
     </main>
