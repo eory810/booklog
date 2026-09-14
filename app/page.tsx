@@ -59,6 +59,22 @@ function cleanIsbn(raw: string): string {
   return s;
 }
 
+// 진짜 책 ISBN인지 체크섬까지 검증 → 카메라 오독/부가기호(5자리) 등 걸러냄
+function isbnValid(s: string): boolean {
+  if (s.length === 13 && /^\d{13}$/.test(s) && (s.startsWith("978") || s.startsWith("979"))) {
+    let sum = 0;
+    for (let i = 0; i < 12; i++) sum += (i % 2 === 0 ? 1 : 3) * Number(s[i]);
+    return (10 - (sum % 10)) % 10 === Number(s[12]);
+  }
+  if (s.length === 10 && /^\d{9}[\dX]$/.test(s)) {
+    let sum = 0;
+    for (let i = 0; i < 9; i++) sum += (10 - i) * Number(s[i]);
+    sum += s[9] === "X" ? 10 : Number(s[9]);
+    return sum % 11 === 0;
+  }
+  return false;
+}
+
 function hashStr(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
@@ -68,10 +84,6 @@ function hashStr(s: string): number {
 function colorFor(b: Book) {
   const key = b.category ? "c:" + b.category : "i:" + b.isbn;
   return PALETTE[hashStr(key) % PALETTE.length];
-}
-
-function spineHeight(b: Book) {
-  return 150 + (hashStr(b.isbn + b.title) % 42); // 150~191
 }
 
 /* ============================ 저장소 ============================ */
@@ -104,6 +116,7 @@ function CameraScanner({
 }) {
   const [err, setErr] = useState("");
   const lastRef = useRef<{ code: string; t: number }>({ code: "", t: 0 });
+  const streakRef = useRef<{ code: string; n: number }>({ code: "", n: 0 });
 
   useEffect(() => {
     let scanner: any = null;
@@ -126,13 +139,18 @@ function CameraScanner({
           { fps: 10, qrbox: { width: 260, height: 150 } },
           (decoded: string) => {
             const now = Date.now();
-            // 같은 코드가 2초 내 반복되면 무시
+            // 1) 같은 코드가 연속 2번 잡혀야 인정 (한 프레임 오독 방지)
+            if (decoded === streakRef.current.code) streakRef.current.n++;
+            else streakRef.current = { code: decoded, n: 1 };
+            if (streakRef.current.n < 2) return;
+            // 2) 방금 처리한 코드가 2초 내 또 들어오면 무시 (중복 추가 방지)
             if (
               decoded === lastRef.current.code &&
               now - lastRef.current.t < 2000
             )
               return;
             lastRef.current = { code: decoded, t: now };
+            streakRef.current = { code: "", n: 0 };
             onDetected(decoded);
           },
           () => {}
@@ -250,8 +268,9 @@ export default function Page() {
   async function handleScan(raw: string) {
     const isbn = cleanIsbn(raw);
     if (scanRef.current) scanRef.current.value = "";
-    if (isbn.length < 10) {
-      if (isbn) flash("바코드를 다시 읽어주세요", true);
+    if (!isbnValid(isbn)) {
+      // 부가기호(5자리)·카메라 오독 등 → 저장/오판 없이 무시
+      if (isbn) flash("바코드를 다시 읽어주세요 (책 ISBN이 아니에요)", true);
       return;
     }
     const existing = books.find((b) => b.isbn === isbn);
@@ -667,21 +686,30 @@ export default function Page() {
             <section className="shelf">
               {shown.map((b) => {
                 const c = colorFor(b);
+                const tilt = (hashStr(b.isbn) % 5) - 2; // -2°~2°
                 return (
                   <button
                     key={b.isbn}
-                    className="spinewrap"
+                    className="bookwrap"
                     onClick={() => setSelected(b)}
                     title={b.title || b.isbn}
                   >
-                    <span
-                      className="spine"
-                      style={{ height: spineHeight(b), background: c.bg, color: c.ink }}
-                    >
-                      <span className="spine-title">{b.title || "제목 미확인"}</span>
-                      <span className="spine-foot">
-                        {b.status === "read" ? "✓" : b.lentTo ? "📤" : ""}
-                      </span>
+                    <span className="book3d" style={{ ["--tilt" as any]: `${tilt}deg` }}>
+                      {b.cover ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img className="bookcover" src={b.cover} alt={b.title} />
+                      ) : (
+                        <span
+                          className="bookcover blank"
+                          style={{ background: c.bg, color: c.ink }}
+                        >
+                          <span className="blank-title">{b.title || "제목 미확인"}</span>
+                          {b.author && <span className="blank-author">{b.author}</span>}
+                        </span>
+                      )}
+                      {(b.status === "read" || b.lentTo) && (
+                        <span className="bookbadge">{b.lentTo ? "📤" : "✓"}</span>
+                      )}
                     </span>
                   </button>
                 );
@@ -1079,31 +1107,51 @@ export default function Page() {
         .empty .emo { font-size: 52px; }
         .empty .big { font-size: 21px; font-weight: 900; color: var(--ink); margin: 10px 0 4px; }
 
-        /* 책장 뷰 */
+        /* 책장 뷰 — 표지가 세워진 모습 */
         .shelf {
-          display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 7px;
-          background: linear-gradient(#fbf7ef, #f6efe2);
-          border: 1px solid #ece1cc; border-radius: 16px; padding: 20px 18px 0;
+          display: flex; flex-wrap: wrap; align-items: flex-end;
+          justify-content: flex-start; gap: 0 14px;
+          background: linear-gradient(#fbf7ef, #f5ecdd);
+          border: 1px solid #ece1cc; border-radius: 16px; padding: 22px 18px 0;
           background-image: repeating-linear-gradient(
             to bottom,
-            transparent 0, transparent 206px,
-            #e6d3ad 206px, #d8bf8f 218px, #cbb079 220px
+            transparent 0, transparent 134px,
+            #e7d4ae 134px, #d6bd88 144px, #c9ae74 148px
           );
-          background-size: 100% 220px; box-shadow: inset 0 1px 0 #fff;
+          background-size: 100% 148px; box-shadow: inset 0 1px 0 #fff;
         }
-        .spinewrap { height: 220px; display: flex; align-items: flex-end; padding-bottom: 20px; }
-        .spine {
-          width: 42px; border-radius: 4px 4px 2px 2px; padding: 10px 4px 8px;
-          display: flex; flex-direction: column; align-items: center; justify-content: space-between;
-          box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.14); border-left: 3px solid rgba(0, 0, 0, 0.07);
-          transition: transform 0.14s; overflow: hidden;
+        .bookwrap {
+          height: 148px; display: flex; align-items: flex-end;
+          padding-bottom: 14px; perspective: 500px;
         }
-        .spinewrap:hover .spine { transform: translateY(-6px); }
-        .spine-title {
-          writing-mode: vertical-rl; text-orientation: mixed; font-size: 11.5px; font-weight: 800;
-          line-height: 1.15; max-height: 150px; overflow: hidden; letter-spacing: -0.01em;
+        .book3d {
+          position: relative; width: 80px; height: 114px; border-radius: 2px 5px 5px 2px;
+          box-shadow: 3px 5px 9px rgba(40, 30, 12, 0.22); overflow: hidden;
+          transform: rotate(var(--tilt, 0deg));
+          transition: transform 0.16s ease, box-shadow 0.16s ease; will-change: transform;
         }
-        .spine-foot { font-size: 11px; }
+        /* 책등 두께 느낌: 왼쪽에 살짝 어두운 띠 */
+        .book3d::before {
+          content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 5px; z-index: 2;
+          background: linear-gradient(90deg, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0));
+        }
+        .bookwrap:hover .book3d {
+          transform: rotate(0deg) translateY(-8px);
+          box-shadow: 5px 10px 18px rgba(40, 30, 12, 0.3);
+        }
+        .bookcover { display: block; width: 100%; height: 100%; object-fit: cover; }
+        .bookcover.blank {
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          gap: 5px; padding: 10px 8px; text-align: center;
+        }
+        .blank-title { font-size: 11.5px; font-weight: 800; line-height: 1.25; letter-spacing: -0.02em;
+          display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+        .blank-author { font-size: 9.5px; opacity: 0.7; }
+        .bookbadge {
+          position: absolute; top: 4px; right: 4px; z-index: 3; font-size: 11px;
+          background: rgba(255, 255, 255, 0.92); border-radius: 20px; padding: 1px 5px;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
 
         /* 목록 뷰 */
         .listview { display: flex; flex-direction: column; gap: 10px; }
@@ -1218,9 +1266,32 @@ export default function Page() {
           box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25); z-index: 80; animation: rise 0.2s ease; }
         .toast.warn { background: var(--gold); }
 
-        @media (max-width: 560px) {
-          .right-ctrls { width: 100%; }
-          .searchbox { min-width: 0; }
+        @media (max-width: 620px) {
+          .app { padding: 0 14px 90px; }
+          .top { flex-wrap: wrap; gap: 10px; }
+          .tabs { width: 100%; justify-content: space-between; }
+          .tabs button { flex: 1; justify-content: center; }
+
+          /* 컨트롤: 한 줄에 욱여넣지 말고 줄바꿈으로 정리 */
+          .controls { gap: 8px; }
+          .searchbox { flex: 1 1 100%; min-width: 0; order: 1; }
+          .chips { order: 2; width: 100%; }
+          .chips .chip { flex: 1; text-align: center; padding: 8px 6px; }
+          .right-ctrls { order: 3; width: 100%; justify-content: space-between; }
+          .right-ctrls select { flex: 1; }
+
+          /* 책장: 표지를 살짝 작게 해 한 줄에 여러 권 */
+          .shelf {
+            gap: 0 12px; padding: 18px 14px 0;
+            background-image: repeating-linear-gradient(
+              to bottom,
+              transparent 0, transparent 118px,
+              #e7d4ae 118px, #d6bd88 127px, #c9ae74 131px
+            );
+            background-size: 100% 131px;
+          }
+          .bookwrap { height: 131px; padding-bottom: 13px; }
+          .book3d { width: 68px; height: 98px; }
         }
       `}</style>
     </main>
