@@ -33,6 +33,10 @@ type WishItem = {
 const BOOKS_KEY = "booklog:books";
 const WISH_KEY = "booklog:wishlist";
 
+// 웹(넷리파이)에서는 빈 값 → 같은 주소의 /api/book 사용.
+// 앱(Capacitor)에서는 .env.local 의 NEXT_PUBLIC_API_BASE 로 넷리파이 절대주소를 넣음.
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
+
 const STATUS_LABEL: Record<Status, string> = {
   unread: "안 읽음",
   reading: "읽는 중",
@@ -281,7 +285,7 @@ export default function Page() {
 
   async function lookupApi(isbn: string): Promise<LookupResult> {
     try {
-      const r = await fetch(`/api/book?isbn=${encodeURIComponent(isbn)}`, {
+      const r = await fetch(`${API_BASE}/api/book?isbn=${encodeURIComponent(isbn)}`, {
         cache: "no-store",
       });
       if (r.status === 429) return { status: "limited" };

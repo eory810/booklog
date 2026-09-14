@@ -5,6 +5,21 @@ export const runtime = "nodejs";
 const KAKAO_KEY = process.env.KAKAO_REST_API_KEY;
 const NL_KEY = process.env.NL_CERT_KEY;
 
+// 앱(Capacitor)은 다른 출처에서 이 API를 호출하므로 CORS 허용 필요.
+// 응답에 민감정보가 없어(키는 서버에만 있음) 모든 출처 허용.
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+function json(data: any, status = 200) {
+  return NextResponse.json(data, { status, headers: CORS });
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS });
+}
+
 type Normalized = {
   found: boolean;
   isbn: string;
@@ -75,11 +90,11 @@ async function lookupNL(isbn: string): Promise<Normalized | null> {
 
 export async function GET(req: NextRequest) {
   if (!KAKAO_KEY && !NL_KEY) {
-    return NextResponse.json({ error: "missing_api_key" }, { status: 500 });
+    return json({ error: "missing_api_key" }, 500);
   }
   const isbn = normalizeIsbn(req.nextUrl.searchParams.get("isbn") || "");
   if (isbn.length < 10) {
-    return NextResponse.json({ error: "invalid_isbn" }, { status: 400 });
+    return json({ error: "invalid_isbn" }, 400);
   }
   try {
     let result: Normalized | null = null;
@@ -90,11 +105,10 @@ export async function GET(req: NextRequest) {
       if (e?.message === "rate_limited") rateLimited = true; // 카카오 쿼터 초과 → NL 폴백 시도
     }
     if (!result) result = await lookupNL(isbn);
-    if (result) return NextResponse.json(result);
-    if (rateLimited)
-      return NextResponse.json({ error: "rate_limited" }, { status: 429 });
-    return NextResponse.json({ found: false, isbn });
+    if (result) return json(result);
+    if (rateLimited) return json({ error: "rate_limited" }, 429);
+    return json({ found: false, isbn });
   } catch {
-    return NextResponse.json({ error: "upstream_error" }, { status: 502 });
+    return json({ error: "upstream_error" }, 502);
   }
 }
