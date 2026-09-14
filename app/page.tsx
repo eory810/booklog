@@ -588,6 +588,7 @@ export default function Page() {
                 inputMode="numeric"
                 autoComplete="off"
                 spellCheck={false}
+                enterKeyHint="done"
                 placeholder={quickMode ? "확인할 책 바코드를 스캔…" : "바코드 스캔 또는 ISBN 입력…"}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -596,6 +597,12 @@ export default function Page() {
                   }
                 }}
               />
+              <button
+                className="gobtn"
+                onClick={() => handleScan(scanRef.current?.value || "")}
+              >
+                {quickMode ? "확인" : "추가"}
+              </button>
               <button className="cambtn" onClick={() => setCamOpen(true)} title="카메라로 스캔">
                 📷
               </button>
@@ -1158,8 +1165,8 @@ export default function Page() {
         /* 스캔 */
         .scanzone { margin-top: 6px; }
         .scanbar {
-          display: flex; align-items: center; gap: 12px;
-          background: var(--green); border-radius: 16px; padding: 16px 18px;
+          display: flex; align-items: center; gap: 10px;
+          background: var(--green); border-radius: 16px; padding: 14px 14px 14px 18px;
           box-shadow: 0 14px 30px -14px rgba(31, 164, 91, 0.6); transition: 0.2s;
         }
         .scanbar.quick { background: var(--gold); box-shadow: 0 14px 30px -14px rgba(217, 147, 13, 0.6); }
@@ -1169,6 +1176,11 @@ export default function Page() {
         @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
         .scan { flex: 1; min-width: 0; background: none; border: none; outline: none; color: #fff; font-size: 18px; font-weight: 600; }
         .scan::placeholder { color: rgba(255, 255, 255, 0.65); font-weight: 500; }
+        .gobtn { flex: none; height: 46px; padding: 0 16px; border-radius: 12px; background: #fff;
+          color: var(--green-deep); font-size: 15px; font-weight: 800; transition: 0.15s; white-space: nowrap; }
+        .scanbar.quick .gobtn { color: var(--gold); }
+        .gobtn:hover { background: #f0f4f0; }
+        .gobtn:active { transform: scale(0.95); }
         .cambtn { width: 46px; height: 46px; flex: none; display: flex; align-items: center; justify-content: center;
           font-size: 22px; background: rgba(255, 255, 255, 0.25); border-radius: 12px; transition: 0.15s; }
         .cambtn:hover { background: rgba(255, 255, 255, 0.36); }
@@ -1467,6 +1479,13 @@ export default function Page() {
           /* 카메라 영상 높이 제한 */
           .reader { max-height: 60vh; }
           .reader :global(video) { max-height: 60vh; object-fit: cover; }
+
+          /* 스캔 바: 버튼 두 개가 들어갈 자리 확보 */
+          .scanbar { gap: 8px; padding: 12px 12px 12px 16px; }
+          .beam { display: none; }
+          .gobtn { padding: 0 14px; height: 44px; font-size: 14.5px; }
+          .cambtn { width: 44px; height: 44px; font-size: 20px; }
+          .scan { font-size: 16px; }
         }
       `}</style>
     </main>
