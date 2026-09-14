@@ -221,6 +221,7 @@ export default function Page() {
 
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ msg: string; warn?: boolean } | null>(null);
+  const [showIntro, setShowIntro] = useState(false);
 
   const scanRef = useRef<HTMLInputElement>(null);
 
@@ -229,6 +230,9 @@ export default function Page() {
     setBooks(loadBooks());
     setWish(loadWish());
     setReady(true);
+    try {
+      if (!localStorage.getItem("booklog:seen")) setShowIntro(true);
+    } catch {}
   }, []);
   useEffect(() => {
     if (ready) localStorage.setItem(BOOKS_KEY, JSON.stringify(books));
@@ -252,15 +256,24 @@ export default function Page() {
   }, [refocus]);
 
   /* --- 조회 --- */
-  async function lookupApi(isbn: string): Promise<any | null> {
+  type LookupResult =
+    | { status: "found"; info: any }
+    | { status: "notfound" }
+    | { status: "limited" }
+    | { status: "error" };
+
+  async function lookupApi(isbn: string): Promise<LookupResult> {
     try {
       const r = await fetch(`/api/book?isbn=${encodeURIComponent(isbn)}`, {
         cache: "no-store",
       });
+      if (r.status === 429) return { status: "limited" };
       const info = await r.json();
-      return info?.found ? info : null;
+      if (info?.found) return { status: "found", info };
+      if (info?.error === "rate_limited") return { status: "limited" };
+      return { status: "notfound" };
     } catch {
-      return null;
+      return { status: "error" };
     }
   }
 
@@ -281,9 +294,17 @@ export default function Page() {
         setQuickResult({ owned: true, book: existing, isbn });
       } else {
         setBusy(true);
-        const info = await lookupApi(isbn);
+        const res = await lookupApi(isbn);
         setBusy(false);
-        setQuickResult({ owned: false, isbn, info });
+        if (res.status === "limited") {
+          flash("지금 조회량이 많아요 🙏 잠시 후 다시 시도해주세요", true);
+          return;
+        }
+        setQuickResult({
+          owned: false,
+          isbn,
+          info: res.status === "found" ? res.info : null,
+        });
       }
       return;
     }
@@ -294,8 +315,14 @@ export default function Page() {
       return;
     }
     setBusy(true);
-    const info = await lookupApi(isbn);
+    const res = await lookupApi(isbn);
     setBusy(false);
+    if (res.status === "limited") {
+      // 쿼터 초과 시엔 빈 책을 저장하지 않고 안내만
+      flash("지금 조회량이 많아요 🙏 잠시 후 다시 시도해주세요", true);
+      return;
+    }
+    const info = res.status === "found" ? res.info : null;
     const book: Book = {
       isbn,
       title: info?.title || "",
@@ -680,7 +707,13 @@ export default function Page() {
             <div className="empty">
               <div className="emo">📖</div>
               <div className="big">서재가 비어 있어요</div>
-              <p>위에서 책 바코드를 스캔하면 여기 예쁘게 꽂힙니다.</p>
+              <p>
+                책 뒷면 <b>바코드</b>를 스캔해보세요.<br />
+                📷 카메라 · USB 스캐너 · ISBN 직접 입력 모두 됩니다.
+              </p>
+              <button className="ghostbtn" onClick={() => setShowIntro(true)}>
+                사용법 다시 보기
+              </button>
             </div>
           ) : view === "shelf" ? (
             <section className="shelf">
@@ -879,6 +912,67 @@ export default function Page() {
         />
       )}
 
+      {/* 첫 방문 안내 */}
+      {showIntro && (
+        <div
+          className="modal-bg"
+          onClick={() => {
+            try {
+              localStorage.setItem("booklog:seen", "1");
+            } catch {}
+            setShowIntro(false);
+            refocus();
+          }}
+        >
+          <div className="modal intro" onClick={(e) => e.stopPropagation()}>
+            <div className="intro-hero">
+              <div className="intro-emo">📚</div>
+              <h2>우리집 책, 한눈에</h2>
+              <p>집에 어떤 책이 있는지 헷갈릴 때, 스캔 한 번으로 정리하세요.</p>
+            </div>
+            <ul className="intro-list">
+              <li>
+                <span>📷</span>
+                <div>
+                  <b>바코드 스캔</b>
+                  <em>책 뒷면 바코드를 카메라·스캐너로 찍거나 ISBN을 입력해요.</em>
+                </div>
+              </li>
+              <li>
+                <span>⚡</span>
+                <div>
+                  <b>빠른 확인 모드</b>
+                  <em>서점에서 스캔해 "집에 이미 있나?"를 즉석에서 확인 — 중복 구매 방지.</em>
+                </div>
+              </li>
+              <li>
+                <span>📖</span>
+                <div>
+                  <b>책장·상태·메모</b>
+                  <em>표지가 꽂힌 책장으로 보고, 읽음/대출/둔 위치까지 기록해요.</em>
+                </div>
+              </li>
+            </ul>
+            <div className="intro-warn">
+              ⚠️ 이 서재는 <b>이 기기(브라우저)에만</b> 저장돼요. 계정·로그인이 없는 대신,
+              캐시를 지우거나 기기를 바꾸면 사라집니다. 가끔 <b>JSON 내보내기</b>로 백업하세요.
+            </div>
+            <button
+              className="intro-cta"
+              onClick={() => {
+                try {
+                  localStorage.setItem("booklog:seen", "1");
+                } catch {}
+                setShowIntro(false);
+                refocus();
+              }}
+            >
+              시작하기
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 책 상세 모달 */}
       {selected && (
         <div className="modal-bg" onClick={() => setSelected(null)}>
@@ -1054,8 +1148,10 @@ export default function Page() {
         @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
         .scan { flex: 1; background: none; border: none; outline: none; color: #fff; font-size: 18px; font-weight: 600; }
         .scan::placeholder { color: rgba(255, 255, 255, 0.65); font-weight: 500; }
-        .cambtn { font-size: 22px; background: rgba(255, 255, 255, 0.2); border-radius: 11px; padding: 6px 10px; flex: none; }
-        .cambtn:hover { background: rgba(255, 255, 255, 0.32); }
+        .cambtn { width: 46px; height: 46px; flex: none; display: flex; align-items: center; justify-content: center;
+          font-size: 22px; background: rgba(255, 255, 255, 0.22); border-radius: 12px; transition: 0.15s; }
+        .cambtn:hover { background: rgba(255, 255, 255, 0.34); }
+        .cambtn:active { transform: scale(0.93); }
 
         .scanopts { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 6px 4px; }
         .switch { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700; color: var(--sub); cursor: pointer; }
@@ -1223,16 +1319,41 @@ export default function Page() {
         .modal { background: #fff; border-radius: 20px; width: 100%; max-width: 440px; max-height: 90vh; overflow: auto;
           box-shadow: 0 30px 70px rgba(0, 0, 0, 0.3); animation: rise 0.2s ease; }
         @keyframes rise { from { transform: translateY(14px); opacity: 0; } to { transform: none; opacity: 1; } }
-        .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: #fff; }
+        .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 14px 20px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: #fff; z-index: 5; }
         .modal-head b { font-size: 16px; font-weight: 900; }
-        .x { font-size: 16px; color: var(--sub); width: 30px; height: 30px; border-radius: 8px; }
-        .x:hover { background: #eef1ee; }
+        .x { font-size: 20px; font-weight: 700; color: var(--ink); width: 40px; height: 40px; flex: none;
+          display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #eef1ee; transition: 0.15s; }
+        .x:hover { background: #dfe4e0; }
+        .x:active { transform: scale(0.92); }
 
         /* 카메라 */
         .modal.cam { max-width: 380px; }
-        .reader { width: 100%; min-height: 260px; background: #000; }
+        .reader { width: 100%; min-height: 260px; background: #000; overflow: hidden; }
+        .reader :global(video) { width: 100% !important; height: auto !important; display: block; }
+        .reader :global(img) { display: none; }
         .cam-tip, .cam-err { padding: 14px 18px; font-size: 13.5px; color: var(--sub); text-align: center; }
         .cam-err { color: #d04545; font-weight: 600; }
+
+        /* 첫 방문 안내 */
+        .ghostbtn { margin-top: 16px; font-size: 13.5px; font-weight: 700; color: var(--green-deep);
+          background: var(--green-soft); border-radius: 10px; padding: 9px 16px; }
+        .modal.intro { max-width: 400px; text-align: center; overflow: hidden; }
+        .intro-hero { background: linear-gradient(135deg, #34c173, #157a42); color: #fff; padding: 30px 24px 24px; }
+        .intro-emo { font-size: 44px; }
+        .intro-hero h2 { font-size: 22px; font-weight: 900; margin: 8px 0 6px; }
+        .intro-hero p { font-size: 14px; opacity: 0.95; line-height: 1.5; }
+        .intro-list { list-style: none; padding: 18px 20px 4px; text-align: left; }
+        .intro-list li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; }
+        .intro-list li span { font-size: 22px; flex: none; width: 30px; text-align: center; }
+        .intro-list b { display: block; font-size: 14.5px; font-weight: 800; }
+        .intro-list em { font-style: normal; font-size: 13px; color: var(--sub); line-height: 1.5; }
+        .intro-warn { margin: 8px 20px 0; background: #fcf3df; border: 1.5px solid #f0dca6; border-radius: 12px;
+          padding: 13px 15px; font-size: 12.5px; color: #6b5518; line-height: 1.55; text-align: left; }
+        .intro-warn b { color: #4a3a0e; }
+        .intro-cta { margin: 18px 20px 22px; width: calc(100% - 40px); background: var(--green); color: #fff;
+          font-size: 15px; font-weight: 800; border-radius: 12px; padding: 14px; }
+        .intro-cta:hover { background: var(--green-deep); }
+        .intro-cta:active { transform: scale(0.98); }
 
         /* 상세 */
         .detail .dbody { display: flex; gap: 14px; padding: 18px 20px; }

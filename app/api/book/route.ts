@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 const KAKAO_KEY = process.env.KAKAO_REST_API_KEY;
-const NL_KEY = process.env.NL_CERT_KEY; // (선택) 국립중앙도서관 폴백용
+const NL_KEY = process.env.NL_CERT_KEY;
 
 type Normalized = {
   found: boolean;
@@ -22,7 +22,6 @@ function normalizeIsbn(raw: string): string {
   return s;
 }
 
-// 1순위: 카카오 책 검색 (표지 썸네일이 안정적)
 async function lookupKakao(isbn: string): Promise<Normalized | null> {
   if (!KAKAO_KEY) return null;
   const url =
@@ -32,6 +31,7 @@ async function lookupKakao(isbn: string): Promise<Normalized | null> {
     headers: { Authorization: `KakaoAK ${KAKAO_KEY}` },
     cache: "no-store",
   });
+  if (r.status === 429) throw new Error("rate_limited"); // 카카오 일일/월간 쿼터 초과
   if (!r.ok) return null;
   const data = await r.json();
   const doc = data?.documents?.[0];
@@ -48,7 +48,6 @@ async function lookupKakao(isbn: string): Promise<Normalized | null> {
   };
 }
 
-// 2순위(선택): 국립중앙도서관 ISBN 서지정보 — 카카오가 못 찾은 책 보완용
 async function lookupNL(isbn: string): Promise<Normalized | null> {
   if (!NL_KEY) return null;
   const url =
@@ -78,23 +77,23 @@ export async function GET(req: NextRequest) {
   if (!KAKAO_KEY && !NL_KEY) {
     return NextResponse.json({ error: "missing_api_key" }, { status: 500 });
   }
-
   const isbn = normalizeIsbn(req.nextUrl.searchParams.get("isbn") || "");
   if (isbn.length < 10) {
     return NextResponse.json({ error: "invalid_isbn" }, { status: 400 });
   }
-
   try {
     let result: Normalized | null = null;
+    let rateLimited = false;
     try {
       result = await lookupKakao(isbn);
-    } catch {
-      /* 카카오 실패 시 폴백으로 계속 진행 */
+    } catch (e: any) {
+      if (e?.message === "rate_limited") rateLimited = true; // 카카오 쿼터 초과 → NL 폴백 시도
     }
     if (!result) result = await lookupNL(isbn);
-
-    if (!result) return NextResponse.json({ found: false, isbn });
-    return NextResponse.json(result);
+    if (result) return NextResponse.json(result);
+    if (rateLimited)
+      return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+    return NextResponse.json({ found: false, isbn });
   } catch {
     return NextResponse.json({ error: "upstream_error" }, { status: 502 });
   }
