@@ -121,7 +121,15 @@ export default async function SharePage({
         })}
       </section>
 
-      <Compare shared={shelf.books.map((b) => ({ isbn: b.isbn, title: b.title, cover: b.cover }))} />
+      <Compare
+        shared={shelf.books.map((b) => ({
+          isbn: b.isbn,
+          title: b.title,
+          author: b.author,
+          category: b.category,
+          cover: b.cover,
+        }))}
+      />
 
       <a className="cta" href="/">나도 내 책장 만들기 →</a>
 
@@ -169,6 +177,18 @@ export default async function SharePage({
         .cmp-cover img { width:100%; height:100%; object-fit:cover; }
         .cmp-blank { font-size:9px; font-weight:700; color:#69756d; padding:4px; text-align:center; line-height:1.2;
           display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+        .cmp-cols { display:flex; gap:12px; }
+        .cmp-col { flex:1; min-width:0; background:#f6f9f7; border-radius:12px; padding:12px; }
+        .cmp-colhead { font-size:12px; font-weight:800; text-align:center; border-radius:8px; padding:4px; margin-bottom:8px; }
+        .cmp-colhead.them { background:#fcf3df; color:#8a6312; }
+        .cmp-colhead.me { background:#e7f5ec; color:#157a42; }
+        .cmp-rank { list-style:none; margin:0; padding:0; }
+        .cmp-rank li { display:flex; align-items:center; justify-content:space-between; gap:6px;
+          font-size:13px; padding:5px 0; border-bottom:1px solid #e9eee9; }
+        .cmp-rank li:last-child { border:none; }
+        .cmp-rank li span { font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .cmp-rank li em { font-style:normal; color:#69756d; font-size:12px; flex:none; }
+        .cmp-dim { font-size:12.5px; color:#9aa39c; text-align:center; padding:8px 0; }
         @media (max-width:620px) {
           .shelf { gap:0 12px; padding:18px 14px 0;
             background-image:repeating-linear-gradient(to bottom, transparent 0, transparent 118px, ${t.board} 118px, ${t.board} 131px);

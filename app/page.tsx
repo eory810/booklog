@@ -241,6 +241,7 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ msg: string; warn?: boolean } | null>(null);
   const [showIntro, setShowIntro] = useState(false);
+  const [isApp, setIsApp] = useState(false);
 
   const scanRef = useRef<HTMLInputElement>(null);
 
@@ -250,6 +251,8 @@ export default function Page() {
     setWish(loadWish());
     setReady(true);
     try {
+      const cap = (window as any).Capacitor;
+      if (cap?.isNativePlatform?.()) setIsApp(true);
       if (!localStorage.getItem("booklog:seen")) setShowIntro(true);
       const t = localStorage.getItem("booklog:shelftheme");
       if (t === "wood" || t === "white" || t === "dark" || t === "pastel") setShelfTheme(t);
@@ -612,6 +615,36 @@ export default function Page() {
     reader.readAsText(file);
   }
 
+  // 앱: 백업 JSON을 파일로 만들어 폰 공유 시트로 내보내기 (드라이브·카톡·파일앱에 저장)
+  async function exportBackupApp() {
+    if (!books.length) return flash("백업할 책이 없어요", true);
+    const cap = (typeof window !== "undefined" ? (window as any).Capacitor : null);
+    const Filesystem = cap?.Plugins?.Filesystem;
+    const Share = cap?.Plugins?.Share;
+    if (!Filesystem || !Share) {
+      flash("백업 기능을 사용할 수 없어요", true);
+      return;
+    }
+    try {
+      const stamp = new Date().toISOString().slice(0, 10);
+      const fileName = `내서재-백업-${stamp}.json`;
+      const json = JSON.stringify({ books, wish }, null, 2);
+      const res = await Filesystem.writeFile({
+        path: fileName,
+        data: json,
+        directory: "CACHE",
+        encoding: "utf8",
+      });
+      await Share.share({
+        title: "내 서재 백업",
+        text: "내 서재 백업 파일이에요. 드라이브·파일앱 등에 저장해두세요.",
+        url: res.uri,
+      });
+    } catch (e: any) {
+      if (e?.name !== "AbortError") flash("백업 내보내기에 실패했어요", true);
+    }
+  }
+
   /* --- 파생 데이터 --- */
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -919,21 +952,28 @@ export default function Page() {
           )}
 
           {/* 백업 바 */}
-          <section className="backup">
-            <span>💾 백업</span>
-            <button onClick={exportJson}>JSON 내보내기</button>
-            <button onClick={exportCsv}>CSV 내보내기</button>
-            <label className="importlbl">
-              불러오기
-              <input
-                type="file"
-                accept="application/json"
-                onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])}
-              />
-            </label>
-          </section>
+          {isApp ? (
+            <section className="backup">
+              <span>💾 백업</span>
+              <button onClick={exportBackupApp}>백업 파일 내보내기</button>
+            </section>
+          ) : (
+            <section className="backup">
+              <span>💾 백업</span>
+              <button onClick={exportJson}>JSON 내보내기</button>
+              <button onClick={exportCsv}>CSV 내보내기</button>
+              <label className="importlbl">
+                불러오기
+                <input
+                  type="file"
+                  accept="application/json"
+                  onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])}
+                />
+              </label>
+            </section>
+          )}
           <p className="localnote">
-            📌 이 서재는 <b>이 브라우저에만</b> 저장돼요. 기기를 바꾸거나 캐시를 지우기 전에 꼭 백업하세요.
+            📌 이 서재는 <b>이 기기에만</b> 저장돼요. 기기를 바꾸거나 앱을 지우기 전에 꼭 백업하세요.
           </p>
         </>
       )}
@@ -1277,7 +1317,6 @@ export default function Page() {
 
       {/* ============================ 스타일 ============================ */}
       <style jsx global>{`
-        @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css");
         :root {
           --green: #1fa45b;
           --green-deep: #157a42;
