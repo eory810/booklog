@@ -410,6 +410,58 @@ export default function Page() {
     setCamOpen(true);
   }
 
+  // 책장 공유: 스냅샷을 서버에 올리고 짧은 링크를 만들어 공유
+  async function shareShelf() {
+    if (!books.length) {
+      flash("공유할 책이 없어요", true);
+      return;
+    }
+    setBusy(true);
+    try {
+      // 사적 필드(메모·빌려준 사람)는 빼고 공개 필드만
+      const shelf = books.map((b) => ({
+        isbn: b.isbn,
+        title: b.title,
+        author: b.author,
+        publisher: b.publisher,
+        pubDate: b.pub_date,
+        cover: b.cover,
+        status: b.status,
+        category: b.category,
+        rating: b.rating,
+      }));
+      const r = await fetch(`${API_BASE}/api/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ books: shelf, theme: shelfTheme }),
+      });
+      const data = await r.json();
+      if (!data?.id) throw new Error("no id");
+      const origin =
+        API_BASE || (typeof window !== "undefined" ? window.location.origin : "");
+      const url = `${origin}/s/${data.id}`;
+      const shareData = {
+        title: "내 서재",
+        text: `내 책장을 구경해보세요 📚 (${books.length}권)`,
+        url,
+      };
+      const cap = (typeof window !== "undefined" ? (window as any).Capacitor : null);
+      const Share = cap?.Plugins?.Share;
+      if (cap?.isNativePlatform?.() && Share) {
+        await Share.share(shareData); // 폰 기본 공유창 (카톡 선택)
+      } else if (typeof navigator !== "undefined" && (navigator as any).share) {
+        await (navigator as any).share(shareData);
+      } else {
+        await navigator.clipboard.writeText(url);
+        flash("공유 링크를 복사했어요 📋");
+      }
+    } catch (e: any) {
+      if (e?.name !== "AbortError") flash("공유에 실패했어요. 잠시 후 다시 시도해주세요", true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function addFromQuick() {
     if (!quickResult || quickResult.owned) return;
     const { isbn, info } = quickResult;
@@ -792,6 +844,9 @@ export default function Page() {
           ) : view === "shelf" ? (
             <>
               <div className="shelfbar">
+                <button className="sharebtn" onClick={shareShelf}>
+                  📤 공유
+                </button>
                 <button className="themebtn" onClick={() => setThemeOpen(true)}>
                   🎨 책장 스타일
                 </button>
@@ -1341,7 +1396,11 @@ export default function Page() {
         .empty .big { font-size: 21px; font-weight: 900; color: var(--ink); margin: 10px 0 4px; }
 
         /* 책장 스타일 바 */
-        .shelfbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+        .shelfbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .sharebtn { font-size: 13px; font-weight: 700; color: #fff; background: var(--green);
+          border-radius: 20px; padding: 7px 15px; transition: 0.15s; }
+        .sharebtn:hover { background: var(--green-deep); }
+        .sharebtn:active { transform: scale(0.96); }
         .themebtn { font-size: 13px; font-weight: 700; color: var(--green-deep);
           background: var(--green-soft); border-radius: 20px; padding: 7px 14px; transition: 0.15s; }
         .themebtn:hover { background: #d6efdf; }
