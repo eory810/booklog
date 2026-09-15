@@ -447,13 +447,16 @@ export default function Page() {
       };
       const cap = (typeof window !== "undefined" ? (window as any).Capacitor : null);
       const Share = cap?.Plugins?.Share;
+      const isTouch =
+        typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
       if (cap?.isNativePlatform?.() && Share) {
-        await Share.share(shareData); // 폰 기본 공유창 (카톡 선택)
-      } else if (typeof navigator !== "undefined" && (navigator as any).share) {
-        await (navigator as any).share(shareData);
+        await Share.share(shareData); // 앱: 폰 기본 공유창 (카톡 선택)
+      } else if (isTouch && (navigator as any).share) {
+        await (navigator as any).share(shareData); // 폰 웹: 네이티브 공유창
       } else {
+        // PC: 어정쩡한 공유창 대신 링크 복사
         await navigator.clipboard.writeText(url);
-        flash("공유 링크를 복사했어요 📋");
+        flash("공유 링크를 복사했어요 📋 카톡 등에 붙여넣기 하세요");
       }
     } catch (e: any) {
       if (e?.name !== "AbortError") flash("공유에 실패했어요. 잠시 후 다시 시도해주세요", true);
