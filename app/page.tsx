@@ -221,6 +221,8 @@ export default function Page() {
   const [tab, setTab] = useState<"library" | "wish" | "stats">("library");
   const [view, setView] = useState<"shelf" | "list">("shelf");
   const [quickMode, setQuickMode] = useState(false);
+  const [shelfTheme, setShelfTheme] = useState<"wood" | "white" | "dark" | "pastel">("wood");
+  const [themeOpen, setThemeOpen] = useState(false);
 
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | Status>("all");
@@ -249,6 +251,8 @@ export default function Page() {
     setReady(true);
     try {
       if (!localStorage.getItem("booklog:seen")) setShowIntro(true);
+      const t = localStorage.getItem("booklog:shelftheme");
+      if (t === "wood" || t === "white" || t === "dark" || t === "pastel") setShelfTheme(t);
     } catch {}
   }, []);
   useEffect(() => {
@@ -257,6 +261,9 @@ export default function Page() {
   useEffect(() => {
     if (ready) localStorage.setItem(WISH_KEY, JSON.stringify(wish));
   }, [wish, ready]);
+  useEffect(() => {
+    if (ready) localStorage.setItem("booklog:shelftheme", shelfTheme);
+  }, [shelfTheme, ready]);
 
   const flash = useCallback((msg: string, warn = false) => {
     setToast({ msg, warn });
@@ -362,6 +369,45 @@ export default function Page() {
     setBooks((prev) => [book, ...prev]);
     if (info?.title) flash(`추가됨 · ${info.title}`);
     else flash("정보를 못 찾았어요 — 책을 눌러 제목을 입력하세요", true);
+  }
+
+  // 카메라 버튼: 앱(Capacitor)에서는 네이티브 스캐너, 웹에서는 기존 방식
+  async function openScanner() {
+    const cap = (typeof window !== "undefined" ? (window as any).Capacitor : null);
+    const native = !!cap?.isNativePlatform?.();
+    const Scanner = cap?.Plugins?.BarcodeScanner;
+    if (native && Scanner) {
+      try {
+        const perm = await Scanner.requestPermissions();
+        const status = perm?.camera;
+        if (status !== "granted" && status !== "limited") {
+          flash("카메라 권한을 허용해주세요", true);
+          return;
+        }
+        // 구글 바코드 스캐너 모듈이 준비됐는지 확인 (안 됐으면 설치 후 재시도 안내)
+        try {
+          const avail = await Scanner.isGoogleBarcodeScannerModuleAvailable?.();
+          if (avail && avail.available === false) {
+            await Scanner.installGoogleBarcodeScannerModule?.();
+            flash("스캐너를 준비하고 있어요… 잠시 후 📷 를 다시 눌러주세요", true);
+            return;
+          }
+        } catch {
+          /* 이 API가 없는 버전이면 무시하고 바로 스캔 시도 */
+        }
+        const res = await Scanner.scan({ formats: ["EAN_13", "EAN_8", "UPC_A"] });
+        const b = res?.barcodes?.[0];
+        const code = b?.rawValue || b?.displayValue || "";
+        if (code) handleScan(code);
+      } catch (e: any) {
+        // 실제 원인을 화면에 노출 (진단용)
+        const msg = e?.message || e?.errorMessage || (typeof e === "string" ? e : "") || "알 수 없는 오류";
+        flash("스캐너 오류: " + msg, true);
+      }
+      return;
+    }
+    // 웹: 기존 카메라 방식
+    setCamOpen(true);
   }
 
   function addFromQuick() {
@@ -607,7 +653,7 @@ export default function Page() {
               >
                 {quickMode ? "확인" : "추가"}
               </button>
-              <button className="cambtn" onClick={() => setCamOpen(true)} title="카메라로 스캔">
+              <button className="cambtn" onClick={openScanner} title="카메라로 스캔">
                 📷
               </button>
             </div>
@@ -744,7 +790,13 @@ export default function Page() {
               </button>
             </div>
           ) : view === "shelf" ? (
-            <section className="shelf">
+            <>
+              <div className="shelfbar">
+                <button className="themebtn" onClick={() => setThemeOpen(true)}>
+                  🎨 책장 스타일
+                </button>
+              </div>
+              <section className="shelf" data-shelf-theme={shelfTheme}>
               {shown.map((b) => {
                 const c = colorFor(b);
                 const tilt = (hashStr(b.isbn) % 5) - 2; // -2°~2°
@@ -776,6 +828,7 @@ export default function Page() {
                 );
               })}
             </section>
+            </>
           ) : (
             <section className="listview">
               {shown.map((b) => (
@@ -1115,6 +1168,53 @@ export default function Page() {
         </div>
       )}
 
+      {/* 책장 스타일 선택 */}
+      {themeOpen && (
+        <div className="modal-bg" onClick={() => setThemeOpen(false)}>
+          <div className="modal theme" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <b>책장 스타일</b>
+              <button className="x" onClick={() => setThemeOpen(false)} aria-label="닫기">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                  stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="themegrid">
+              {([
+                { id: "wood", label: "원목" },
+                { id: "white", label: "화이트" },
+                { id: "dark", label: "다크 서재" },
+                { id: "pastel", label: "파스텔" },
+              ] as const).map((t) => (
+                <button
+                  key={t.id}
+                  className={`themecard${shelfTheme === t.id ? " on" : ""}`}
+                  onClick={() => {
+                    setShelfTheme(t.id);
+                    setThemeOpen(false);
+                    flash(`책장 스타일: ${t.label}`);
+                  }}
+                >
+                  <span className={`themeprev tp-${t.id}`}>
+                    <span className="tp-book b1" />
+                    <span className="tp-book b2" />
+                    <span className="tp-book b3" />
+                    <span className="tp-board" />
+                  </span>
+                  <span className="themelabel">
+                    {t.label}
+                    {shelfTheme === t.id && <em> ✓</em>}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {toast && <div className={`toast${toast.warn ? " warn" : ""}`}>{toast.msg}</div>}
 
       {/* ============================ 스타일 ============================ */}
@@ -1240,19 +1340,70 @@ export default function Page() {
         .empty .emo { font-size: 52px; }
         .empty .big { font-size: 21px; font-weight: 900; color: var(--ink); margin: 10px 0 4px; }
 
-        /* 책장 뷰 — 표지가 세워진 모습 */
+        /* 책장 스타일 바 */
+        .shelfbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+        .themebtn { font-size: 13px; font-weight: 700; color: var(--green-deep);
+          background: var(--green-soft); border-radius: 20px; padding: 7px 14px; transition: 0.15s; }
+        .themebtn:hover { background: #d6efdf; }
+        .themebtn:active { transform: scale(0.96); }
+
+        /* 책장 뷰 — 표지가 세워진 모습 (테마 변수로 색 전환) */
         .shelf {
+          --shelf-bg1: #fbf7ef; --shelf-bg2: #f5ecdd;
+          --board1: #e7d4ae; --board2: #d6bd88; --board3: #c9ae74;
+          --shelf-border: #ece1cc; --shelf-inset: rgba(255, 255, 255, 0.9);
           display: flex; flex-wrap: wrap; align-items: flex-end;
           justify-content: flex-start; gap: 0 14px;
-          background: linear-gradient(#fbf7ef, #f5ecdd);
-          border: 1px solid #ece1cc; border-radius: 16px; padding: 22px 18px 0;
+          background: linear-gradient(var(--shelf-bg1), var(--shelf-bg2));
+          border: 1px solid var(--shelf-border); border-radius: 16px; padding: 22px 18px 0;
           background-image: repeating-linear-gradient(
             to bottom,
             transparent 0, transparent 134px,
-            #e7d4ae 134px, #d6bd88 144px, #c9ae74 148px
+            var(--board1) 134px, var(--board2) 144px, var(--board3) 148px
           );
-          background-size: 100% 148px; box-shadow: inset 0 1px 0 #fff;
+          background-size: 100% 148px; box-shadow: inset 0 1px 0 var(--shelf-inset);
         }
+        .shelf[data-shelf-theme="white"] {
+          --shelf-bg1: #ffffff; --shelf-bg2: #f3f6f3;
+          --board1: #e6e9e6; --board2: #d3d8d3; --board3: #c4cbc4;
+          --shelf-border: #e5e9e6; --shelf-inset: #ffffff;
+        }
+        .shelf[data-shelf-theme="dark"] {
+          --shelf-bg1: #2c2824; --shelf-bg2: #211e1a;
+          --board1: #4d4130; --board2: #3b3123; --board3: #2e2618;
+          --shelf-border: #3a342c; --shelf-inset: rgba(255, 255, 255, 0.06);
+        }
+        .shelf[data-shelf-theme="pastel"] {
+          --shelf-bg1: #eef7f0; --shelf-bg2: #e2efe7;
+          --board1: #cfe6d5; --board2: #bcdcc6; --board3: #a9d1b6;
+          --shelf-border: #d5e8db; --shelf-inset: #ffffff;
+        }
+
+        /* 테마 선택 모달 */
+        .modal.theme { max-width: 400px; }
+        .themegrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 18px 20px 22px; }
+        .themecard { border: 2px solid var(--line); border-radius: 14px; padding: 10px; background: #fff;
+          transition: 0.15s; display: flex; flex-direction: column; gap: 8px; }
+        .themecard:hover { border-color: var(--brass-soft); }
+        .themecard.on { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+        .themeprev { position: relative; height: 76px; border-radius: 9px; overflow: hidden;
+          display: flex; align-items: flex-end; justify-content: center; gap: 5px; padding-bottom: 12px; }
+        .themeprev .tp-book { width: 13px; border-radius: 2px; }
+        .themeprev .b1 { height: 42px; background: #FCD34D; }
+        .themeprev .b2 { height: 52px; background: #ffffff; }
+        .themeprev .b3 { height: 46px; background: #5AA9F0; }
+        .themeprev .tp-board { position: absolute; left: 8px; right: 8px; bottom: 6px; height: 7px; border-radius: 4px; }
+        .tp-wood { background: linear-gradient(#fbf7ef, #f0e2c9); }
+        .tp-wood .tp-board { background: #d6bd88; }
+        .tp-white { background: linear-gradient(#ffffff, #eef1ee); }
+        .tp-white .tp-board { background: #cfd5cf; }
+        .tp-white .b2 { background: #f2f4f2; box-shadow: inset 0 0 0 1px #e2e6e2; }
+        .tp-dark { background: linear-gradient(#2c2824, #211e1a); }
+        .tp-dark .tp-board { background: #4d4130; }
+        .tp-pastel { background: linear-gradient(#eef7f0, #dcece2); }
+        .tp-pastel .tp-board { background: #b6d9c1; }
+        .themelabel { font-size: 13.5px; font-weight: 800; text-align: center; }
+        .themelabel em { font-style: normal; color: var(--green); }
         .bookwrap {
           height: 148px; display: flex; align-items: flex-end;
           padding-bottom: 14px; perspective: 500px;
@@ -1459,7 +1610,7 @@ export default function Page() {
             background-image: repeating-linear-gradient(
               to bottom,
               transparent 0, transparent 118px,
-              #e7d4ae 118px, #d6bd88 127px, #c9ae74 131px
+              var(--board1) 118px, var(--board2) 127px, var(--board3) 131px
             );
             background-size: 100% 131px;
           }
