@@ -424,7 +424,7 @@ export default function Page() {
         title: b.title,
         author: b.author,
         publisher: b.publisher,
-        pubDate: b.pub_date,
+        pubDate: b.pubDate,
         cover: b.cover,
         status: b.status,
         category: b.category,
