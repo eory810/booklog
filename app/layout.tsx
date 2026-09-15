@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 
 // 배포 주소가 바뀌면 이 URL도 바꿔주세요.
 const SITE_URL = "https://book-scan-library.netlify.app";
-const APP_NAME = "내 서재 📚 — 우리집 책 스캔";
+const APP_NAME = "리베르홈 📚 — 우리집 책 스캔";
 const APP_DESC =
   "집에 어떤 책이 있는지 스캔 한 번으로 정리하세요. 중복 구매 방지, 표지 책장, 대출 기록까지 — 로그인 없이.";
 
@@ -34,14 +34,14 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: APP_NAME,
   description: APP_DESC,
-  applicationName: "내 서재",
+  applicationName: "리베르홈",
   icons: { icon: EMOJI_ICON },
   openGraph: {
     title: APP_NAME,
     description: APP_DESC,
     type: "website",
     locale: "ko_KR",
-    siteName: "내 서재",
+    siteName: "리베르홈",
   },
   twitter: { card: "summary", title: APP_NAME, description: APP_DESC },
 };

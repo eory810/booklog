@@ -60,7 +60,7 @@ export async function generateMetadata({
   const who = shelf?.name ? `${shelf.name}님의 ` : "";
   const title = shelf ? `${who}책장 📚 (${count}권)` : "책장을 찾을 수 없어요";
   const description = shelf
-    ? "'내 서재'로 공유된 책장이에요. 눌러서 구경해보세요."
+    ? "'리베르홈'으로 공유된 책장이에요. 눌러서 구경해보세요."
     : "링크가 만료되었거나 잘못되었어요.";
   return {
     title,
@@ -84,7 +84,7 @@ export default async function SharePage({
         <div style={{ fontSize: 48 }}>🔍</div>
         <h1 style={{ fontSize: 22, color: "#25221b", margin: "12px 0 6px" }}>책장을 찾을 수 없어요</h1>
         <p>링크가 만료되었거나 잘못된 주소예요.</p>
-        <a href="/" style={{ color: "#157a42", fontWeight: 700 }}>내 서재 만들러 가기 →</a>
+        <a href="/" style={{ color: "#157a42", fontWeight: 700 }}>리베르홈에서 내 책장 만들기 →</a>
       </main>
     );
   }
